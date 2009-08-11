@@ -7,7 +7,7 @@ import re
 import os
 import hashlib
 from django.conf import settings
-from django.db import connection
+from django.db import connection,transaction
 from django.core.management.base import BaseCommand, CommandError
 from optparse import make_option
 from datetime import datetime
@@ -25,7 +25,7 @@ class Command(BaseCommand):
                         dest='do_execute', default=False,
                         help='Execute scripts not in versions table.'),
             make_option('-p', '--path', dest='path',
-                default=os.path.join(settings.PROJECT_PATH, 'db'),
+                default=os.path.join(os.path.dirname(os.path.normpath(os.sys.modules[settings.SETTINGS_MODULE].__file__)), 'db'),
                 help="The path to the database scripts."))
     help = "Upgrade database."
 
@@ -33,12 +33,22 @@ class Command(BaseCommand):
         """Creates the versions table if it doesn't already exist."""
         tables = connection.introspection.table_names()
         if 'versions' not in tables:
-            sql = """CREATE TABLE `versions` (
-                `version` VARCHAR(200) NOT NULL,
-                `date_created` DATETIME NOT NULL,
-                `sql_executed` LONGTEXT NULL,
-                `scm_version` int null
-            );"""
+            if settings.DATABASE_ENGINE=='sqlite3':
+                sql = """CREATE TABLE `versions` (
+                    `version` VARCHAR(200) NOT NULL,
+                    `date_created` DATETIME NOT NULL,
+                    `sql_executed` LONGTEXT NULL,
+                    `scm_version` int null
+                );"""
+                
+            if settings.DATABASE_ENGINE=='postgresql_psycopg2' or settings.DATABASE_ENGINE=='postgresql':
+                sql = """CREATE TABLE versions (
+                    version character varying(200) NOT NULL,
+                    date_created timestamp with time zone NOT NULL,
+                    sql_executed text NULL,
+                    scm_version integer null
+                );"""
+            
             cursor = connection.cursor()
             cursor.execute(sql)
             cursor.close()
@@ -53,9 +63,7 @@ class Command(BaseCommand):
             stmts = '\n'.join(statements)+';'
             count = c.execute("""INSERT INTO versions
                 (version, date_created, sql_executed, scm_version)
-                VALUES (%(sql)s, %(date)s, %(statements)s, %(revision)s);""",
-                {'sql': sql, 'date': now, 'statements': stmts,
-                'revision': rev})
+                VALUES (%s, %s, %s, %s);""",[sql,now,stmts,rev])
             print "## DB status updated: %s" % sql
 
     def _get_version_list(self):
@@ -160,4 +168,5 @@ class Command(BaseCommand):
                         executed.append(statement)
                 seg_num += 1
             self._stamp_version(sql, executed, splits['rev'])
+        transaction.commit_unless_managed()
         print "# Script Ended %s" % datetime.now()
