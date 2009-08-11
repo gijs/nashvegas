@@ -38,15 +38,17 @@ class Command(BaseCommand):
                     `version` VARCHAR(200) NOT NULL,
                     `date_created` DATETIME NOT NULL,
                     `sql_executed` LONGTEXT NULL,
-                    `scm_version` int null
+                    `scm_version` int null,
+                    PRIMARY KEY (version)
                 );"""
                 
             if settings.DATABASE_ENGINE=='postgresql_psycopg2' or settings.DATABASE_ENGINE=='postgresql':
                 sql = """CREATE TABLE versions (
-                    version character varying(200) NOT NULL,
+                    version character varying(50) NOT NULL,
                     date_created timestamp with time zone NOT NULL,
                     sql_executed text NULL,
-                    scm_version integer null
+                    scm_version integer null,
+                    PRIMARY KEY (version)
                 );"""
             
             cursor = connection.cursor()
